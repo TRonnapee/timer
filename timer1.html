@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        #timer-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 300px;
+            height: 300px;
+        }
+
+        #svg-timer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        circle {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.01s linear;
+        }
+
+        #seconds-circle {
+            stroke: #00f;
+        }
+
+        #minutes-circle {
+            stroke: #f00;
+        }
+
+        #timer {
+            font-size: 36px;
+            position: absolute;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        input[type="text"] {
+            font-size: 36px;
+            text-align: center;
+            width: 200px;
+            display: none;
+        }
+
+        .button-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            font-size: 20px;
+            padding: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="timer-container">
+        <svg id="svg-timer" viewBox="0 0 100 100">
+            <circle id="minutes-circle" cx="50" cy="50" r="45" stroke-dasharray="282.6" stroke-dashoffset="0"></circle>
+            <circle id="seconds-circle" cx="50" cy="50" r="35" stroke-dasharray="219.9" stroke-dashoffset="0"></circle>
+        </svg>
+
+        <div id="timer" onclick="editTime()">05:00:000</div>
+        <input type="text" id="timeInput" onblur="saveTime()" onkeydown="if (event.key === 'Enter') saveTime()">
+    </div>
+
+    <div class="button-row">
+        <button onclick="addTime(30)">+0:30</button>
+        <button onclick="addTime(60)">+1:00</button>
+        <button onclick="addTime(300)">+5:00</button>
+    </div>
+
+    <div class="button-row">
+        <button onclick="startTimer()">Start</button>
+        <button onclick="pauseTimer()">Pause</button>
+        <button onclick="resetTimer()">Reset</button>
+    </div>
+
+    <audio id="alarmSound">
+        <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        let initialTime = 300000; 
+        let timeLeft = initialTime;
+        let timerInterval = null;
+        let isPaused = true;
+        let lastUpdateTime = null; 
+
+        const alarmSound = document.getElementById("alarmSound");
+
+        const secondsCircle = document.getElementById('seconds-circle');
+        const minutesCircle = document.getElementById('minutes-circle');
+
+        const fullDashArraySeconds = 219.9;
+        const fullDashArrayMinutes = 282.6;
+
+        function displayTime() {
+            if (timeLeft < 0) {
+                timeLeft = 0; // ตรวจสอบให้แน่ใจว่า timeLeft ไม่เป็นค่าติดลบ
+            }
+
+            let totalSeconds = Math.floor(timeLeft / 1000);
+            let minutes = Math.floor(totalSeconds / 60);
+            let seconds = totalSeconds % 60;
+            let milliseconds = Math.floor((timeLeft % 1000) / 10); // แปลงมิลลิวินาทีเป็น 2 หลัก
+
+            if (minutes < 10) minutes = '0' + minutes;
+            if (seconds < 10) seconds = '0' + seconds;
+            if (milliseconds < 10) milliseconds = '0' + milliseconds;
+
+            const displayString = `${minutes}:${seconds}:${milliseconds}`;
+            
+            document.title = displayString;
+            document.getElementById('timer').innerText = displayString;
+
+            updateCircles();
+        }
+
+
+
+        
+
+        function updateCircles() {
+            const totalTimePercentage = (timeLeft / initialTime) * fullDashArrayMinutes;
+            const secondsPercentage = ((timeLeft % 60000) / 60000) * fullDashArraySeconds;
+
+            secondsCircle.style.strokeDashoffset = fullDashArraySeconds - secondsPercentage;
+            minutesCircle.style.strokeDashoffset = fullDashArrayMinutes - totalTimePercentage;
+        }
+
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timeLeft = initialTime; 
+            displayTime();
+            isPaused = true;
+        }
+
+        function addTime(milliseconds) {
+            timeLeft += milliseconds * 1000;
+            initialTime += milliseconds * 1000; 
+            displayTime();
+        }
+
+        function saveTime() {
+            const timerDisplay = document.getElementById('timer');
+            const timeInput = document.getElementById('timeInput');
+            const inputTime = timeInput.value.split(':');
+
+            if (inputTime.length === 3) {
+                let minutes = parseInt(inputTime[0], 10);
+                let seconds = parseInt(inputTime[1], 10);
+                let milliseconds = parseInt(inputTime[2], 10);
+
+                if (!isNaN(minutes) && !isNaN(seconds) && !isNaN(milliseconds) && seconds >= 0 && seconds < 60 && milliseconds >= 0 && milliseconds < 100) {
+                    timeLeft = (minutes * 60 + seconds) * 1000 + milliseconds * 10;
+                    initialTime = timeLeft; // อัปเดต initialTime ตามค่าที่ตั้งค่าใหม่
+                    displayTime();
+                }
+            }
+
+            timeInput.style.display = 'none';
+            timerDisplay.style.display = 'flex';
+            displayTime();
+        }
+
+
+        function startTimer() {
+            if (!timerInterval && isPaused) {
+                isPaused = false;
+                lastUpdateTime = Date.now(); // บันทึกเวลาเริ่มต้น
+                function tick() {
+                    const currentTime = Date.now();
+                    const deltaTime = currentTime - lastUpdateTime; // คำนวณเวลาที่ผ่านไปจริง ๆ
+                    lastUpdateTime = currentTime;
+
+                    timeLeft -= deltaTime; // ลดเวลาตาม deltaTime ที่คำนวณได้
+                    displayTime();
+
+                    if (timeLeft > 0) {
+                        requestAnimationFrame(tick); // อัปเดตทุกเฟรม
+                    } else {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        isPaused = true;
+                    }
+                }
+                requestAnimationFrame(tick); // เริ่มกระบวนการอัปเดตทุกเฟรม
+            }
+        }
+
+        function pauseTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isPaused = true;
+        }
+
+        
+
+        function editTime() {
+            const timerDisplay = document.getElementById('timer');
+            const timeInput = document.getElementById('timeInput');
+            timeInput.style.display = 'flex';
+            timerDisplay.style.display = 'none';
+
+            let totalSeconds = Math.floor(timeLeft / 1000);
+            let minutes = Math.floor(totalSeconds / 60);
+            let seconds = totalSeconds % 60;
+            let milliseconds = Math.floor((timeLeft % 1000) / 10);
+
+            if (seconds < 10) seconds = '0' + seconds;
+            if (milliseconds < 10) milliseconds = '0' + milliseconds;
+            timeInput.value = `${minutes}:${seconds}:${milliseconds}`;
+            timeInput.focus();
+        }
+
+        displayTime();
+    </script>
+
+</body>
+</html>
